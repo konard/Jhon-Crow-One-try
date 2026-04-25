@@ -1,30 +1,58 @@
-# Proposed solutions — comparison
+# Proposed solutions — Issue #5: Player Model
 
-| # | Approach | Effort | Multi-part skeleton (R3) | Idle anim (R5) | SIGNALIS-friendly (R4) | Reviewable diff | Verdict |
-|---|---|---|---|---|---|---|---|
-| **A** | **Reuse `SKM_Quinn_Simple` + `MF_Idle` from the engine's Third Person template via a Python setup script** | **Low** | **Yes** (89-bone Manny/Quinn skeleton) | **Yes** (`MF_Idle`) | **Yes** (low-poly silhouette, easy retexture, skeleton kept for retargeting) | **Yes** (only text artefacts: 1 Python script, 1 .ini change, docs) | **Selected** |
-| B | Commit the `.uasset` mannequin files directly into `Content/Characters/Mannequins/` | Low–Medium | Yes | Yes | Yes | **No** — binary `.uasset` blobs, opaque diff, ~MB-sized commits | Rejected |
-| C | Pull a Mixamo character (e.g. *Y-Bot*) + idle, retarget to mannequin skeleton | High | Yes | Yes (after retarget) | Yes | Partly (FBX is binary too, retarget chain is non-trivial) | Deferred to a future PR |
-| D | Use a `MetaHuman` | Very High | Yes (different skeleton) | Yes | **No** — wrong aesthetic for SIGNALIS | No (binary, very large) | Rejected |
-| E | Author a custom low-poly mesh + bones + idle in Blender | Very High | Yes | Yes | Yes | Partly (FBX binary) | Rejected — re-inventing what UE ships |
+## Options considered (Unity 6.3 LTS)
+
+| # | Approach | Binary assets? | CI-compatible | Effort | Verdict |
+|---|---|---|---|---|---|
+| **A** | **Unity primitive-capsule hierarchy prefab** | **No** | **✅** | **Low** | **Selected** |
+| B | Mixamo FBX humanoid (Y Bot / Adam) + idle retarget | FBX + textures | ✅ (Git LFS) | Medium | Deferred |
+| C | URP Starter Assets (Unity Technologies) | Partial | ✅ | Medium | Overkill for mannequin |
+| D | ProBuilder proto mesh | After editor bake | ✅ | Medium | Requires extra package |
+| E | Runtime-generated procedural mesh (C# only) | No | ✅ | High | Overengineered |
 
 ## Why A wins for this issue
 
-1. **Zero binary assets in the diff.** The PR is exclusively text: a Python script, an `.ini` change, and Markdown. Every byte is reviewable.
-2. **Self-bootstrapping.** The first time the project is opened in UE 5.3, the contributor runs **Tools → Execute Python Script…** once and the mannequin, ABP, character BP and game mode appear in `Content/`. No drag-and-drop.
-3. **Headless-CI compatible.** The same script works as a `-run=PythonScript` commandlet inside Epic's Docker image, which the existing `.github/workflows/build.yml` already pulls. A future CI step can re-materialise the assets at build time without a local checkout step.
-4. **Clean upgrade path to SIGNALIS.** Once a low-poly Replika mesh exists, swapping it in is two lines in the same script (replace `SKM_Quinn_Simple` reference); the skeleton, ABP and BP keep working unchanged.
+1. **Zero binary assets in the diff.** The PR is exclusively text: YAML prefab,
+   YAML animation clip, YAML animator controller, C# scripts, Markdown. Every
+   byte is reviewable.
+2. **Built-in primitive.** Unity's Capsule mesh (`fileID: 10208`,
+   `guid: 0000000000000000e000000000000000`) is available in every project; no
+   package install, no FBX import, no editor-import step.
+3. **Correct multi-part hierarchy.** 13 segments cover all required joints:
+   clavicles, upper arms, forearms, hands; thighs, calves, feet (R3).
+4. **CI-compatible.** GameCI `unity-builder@v4` can package the prefab headlessly
+   without launching the editor interactively.
+5. **SIGNALIS-friendly.** Low-poly capsule proportions match the chunky PS1-era
+   silhouette; future swap is just replacing segment meshes (R4).
 
-## Existing components reused
+## Files delivered
+
+| File | Purpose |
+|---|---|
+| `Assets/Characters/Player/PlayerMannequin.prefab` | 13-segment humanoid capsule mannequin with `PlayerCharacter` + `Animator`. |
+| `Assets/Characters/Player/Animations/PlayerIdleClip.anim` | 2-second looping breathing idle (chest Y oscillation ±3 cm at 60 fps). |
+| `Assets/Characters/Player/Animations/PlayerAnimatorController.controller` | Single-state Animator Controller: enters Idle state on trigger. |
+| `Assets/Characters/Player/Scripts/PlayerCharacter.cs` | `MonoBehaviour`: plays Idle on Start; exposes `FaceDirection()` for future locomotion. |
+| `Assets/Characters/Player/Scripts/PlayerEditorSetup.cs` | Editor-only menu item: **GameObject → One-try → Add Player Mannequin**. |
+
+## Existing Unity components reused
 
 | Component | Source | Role |
 |---|---|---|
-| `SKM_Quinn_Simple` (skeletal mesh) | UE 5.3 Third Person template | Player body — multi-part, low-poly. |
-| `SK_Mannequin` (skeleton) | UE 5.3 Third Person template | Bone hierarchy (89 bones). |
-| `MF_Idle` (animation sequence) | UE 5.3 Third Person template | Idle pose, satisfies R5. |
-| `Character` (engine class) | UE 5.3 (`/Script/Engine.Character`) | Base class for `BP_PlayerCharacter` — capsule + mesh + character movement. |
-| `GameModeBase` (engine class) | UE 5.3 (`/Script/Engine.GameModeBase`) | Base class for `BP_PlayerGameMode`, sets default pawn. |
-| `AnimInstance` (engine class) | UE 5.3 (`/Script/Engine.AnimInstance`) | Base class for `ABP_PlayerCharacter` — drives the idle. |
-| Python Editor Scripting Plugin | UE 5.3 built-in | Runs the setup script. |
+| Capsule primitive mesh | Unity built-in | All 13 body segments — no external assets. |
+| `Animator` | Unity built-in (`UnityEngine.Animator`) | Drives the Idle animation on the prefab root. |
+| `MeshFilter` + `MeshRenderer` | Unity built-in | Renders each capsule segment. |
+| Default material | Unity built-in (`fileID: 10303`) | Grey diffuse placeholder; easy to swap. |
 
-No third-party plugins, no Marketplace dependencies, no network downloads.
+No third-party plugins, no Marketplace/Asset Store dependencies, no network downloads.
+
+## SIGNALIS next step (out of scope for this issue)
+
+When a low-poly Replika mesh is ready:
+1. Skin it to a Humanoid avatar rig in Blender (or retarget via Unity's Humanoid pipeline).
+2. Import the FBX, set rig type to **Humanoid** in Import Settings.
+3. Reassign the `Animator.Avatar` on `PlayerMannequin` to the new Humanoid avatar.
+4. `PlayerCharacter.cs`, `PlayerAnimatorController`, and the CI workflow are unchanged.
+
+Alternatively, keep the capsule tree and add a skinned mesh as a child of `Body/` with
+bones that bind to the existing Transform hierarchy.

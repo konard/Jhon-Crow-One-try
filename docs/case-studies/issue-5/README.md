@@ -5,10 +5,39 @@ This folder collects the research and design rationale behind the player-model i
 | File | Purpose |
 |---|---|
 | [issue.md](./issue.md) | Original issue text (RU + EN translation), explicit requirements table, out-of-scope list. |
-| [analysis.md](./analysis.md) | Project context, why we reuse Epic's Manny/Quinn mannequin, SIGNALIS aesthetic notes, build-environment constraints, validation plan, risks. |
-| [proposed-solutions.md](./proposed-solutions.md) | Comparison of 5 approaches and the selected solution. |
-| [references.md](./references.md) | All consulted sources (SIGNALIS press kit, UE5 docs, mannequin asset references, headless-editor automation guides). |
+| [analysis.md](./analysis.md) | Project context, Unity engine choice, multi-part primitive mannequin rationale, SIGNALIS aesthetic notes, build-environment constraints, validation plan, risks. |
+| [proposed-solutions.md](./proposed-solutions.md) | Comparison of approaches and the selected solution (Unity primitive-based mannequin prefab). |
+| [references.md](./references.md) | All consulted sources (SIGNALIS press kit, Unity docs, animation/humanoid references, GameCI). |
 
 ## TL;DR
 
-We add a multi-part player mannequin (`SKM_Quinn_Simple`, 89-bone Manny/Quinn skeleton) with the stock `MF_Idle` animation, wrapped in `BP_PlayerCharacter` and a `BP_PlayerGameMode` that sets it as the default pawn. The mannequin is *not* committed as binary `.uasset` files — instead a single Python editor script (`Tools/Setup_PlayerMannequin.py`) materialises it on first open, keeping the PR diff text-only and reviewable. Skeleton and animations are preserved so a future SIGNALIS-styled mesh can be swapped in without touching the Blueprint or animation graph.
+We add a multi-part player mannequin prefab (`Assets/Characters/Player/PlayerMannequin.prefab`)
+built from Unity primitive Capsule meshes arranged in a humanoid skeleton layout:
+
+```
+PlayerMannequin (root — PlayerCharacter + Animator)
+└── Body
+    ├── Head
+    ├── Neck
+    ├── Chest
+    │   ├── Spine
+    │   ├── Clavicle_L → UpperArm_L → Forearm_L → Hand_L
+    │   └── Clavicle_R → UpperArm_R → Forearm_R → Hand_R
+    └── Hips
+        ├── Thigh_L → Calf_L → Foot_L
+        └── Thigh_R → Calf_R → Foot_R
+```
+
+The mannequin uses Unity's built-in capsule primitive — no external assets required,
+no binary blobs in the repo, fully text-diffable YAML. An `Animator` component on the
+root drives a looping `PlayerIdleClip.anim` via `PlayerAnimatorController.controller`.
+A `PlayerCharacter` MonoBehaviour exposes a `FaceDirection()` hook for future locomotion.
+
+The body-part hierarchy mirrors the standard humanoid bone layout so a future
+SIGNALIS-styled skinned mesh can be retargeted onto the same tree without modifying
+the controller or animation graph.
+
+**Engine correction (vs earlier draft):** An earlier draft implemented this in Unreal
+Engine 5. The issue repo uses **Unity** (per `GAME_DESIGN.md` — "Движок: Unity"), so
+this implementation targets Unity 6.3 LTS, consistent with PR #8 which migrates the
+project skeleton to Unity.

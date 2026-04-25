@@ -29,16 +29,22 @@
 >
 > Compile related data into `./docs/case-studies/issue-5`, do a deep case-study analysis (also search online for facts and data), propose possible solutions (including known existing components/libraries that solve a similar problem or can help). And implement.
 
+## Engine clarification (PR feedback)
+
+The repo owner confirmed in a PR comment that the game uses **Unity**, not Unreal Engine
+(per `GAME_DESIGN.md` — "Движок: Unity"). An earlier draft implemented this in UE5 and
+was rejected. The implementation was rewritten for Unity 6.3 LTS.
+
 ## Hard requirements (extracted)
 
-| # | Requirement | Acceptance criterion |
+| # | Requirement | Acceptance criterion (Unity) |
 |---|---|---|
-| R1 | Player model exists in the project | A `Character` Blueprint is set as the default pawn of the active GameMode. |
-| R2 | Mannequin only — no weapons or gear | The mesh has no attached weapon sockets / props. |
-| R3 | Multi-part skeleton | Skeleton exposes separate bones for clavicle, upper-arm, lower-arm, hand, thigh, calf, foot, ball — independently animatable. |
-| R4 | Future styling to SIGNALIS | Mesh material and silhouette must be replaceable without re-rigging (clean skeleton, material slots exposed). |
-| R5 | Idle animation for verification | Standing in PIE plays a looping idle pose. |
-| R6 | Use presets if needed | Reusing the engine's stock mannequin / animation assets is explicitly allowed. |
+| R1 | Player model exists in the project | A `PlayerMannequin.prefab` can be dropped into any scene and plays at runtime. |
+| R2 | Mannequin only — no weapons or gear | The prefab has no weapon or prop GameObjects attached. |
+| R3 | Multi-part hierarchy | Hierarchy exposes separate Transforms for clavicle, upper-arm, forearm, hand; thigh, calf, foot — independently animatable. |
+| R4 | Future styling to SIGNALIS | Body segments are individually addressable; future swap replaces meshes or adds a skinned mesh without modifying scripts or animator. |
+| R5 | Idle animation for verification | Animator Controller plays `PlayerIdleClip.anim` (breathing idle) on Start. |
+| R6 | Use presets if needed | Unity built-in Capsule primitive used — a supported zero-dependency "preset". |
 
 ## Out of scope (this issue)
 

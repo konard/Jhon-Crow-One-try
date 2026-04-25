@@ -24,6 +24,22 @@ Unreal Engine prototype.
    imports packages and generates the local `Library/` cache.
 5. Open `Assets/Scenes/SampleScene.unity`.
 
+## Player Mannequin
+
+A multi-part humanoid mannequin prefab lives at
+`Assets/Characters/Player/PlayerMannequin.prefab`. To test it:
+
+1. In an open scene, use the menu **GameObject → One-try → Add Player Mannequin**,
+   or drag the prefab from the Project window.
+2. Press **Play**. The mannequin plays a looping idle animation (gentle chest
+   breathing).
+
+The mannequin is built from Unity primitive Capsules arranged in a humanoid
+hierarchy (clavicles, upper arms, forearms, hands; thighs, calves, feet).
+No external assets required — everything is in the repo as readable YAML.
+Segment meshes and materials can be swapped independently for future
+SIGNALIS-style visuals.
+
 ## GitHub Actions — Portable Windows EXE
 
 The workflow [`.github/workflows/build.yml`](./.github/workflows/build.yml)

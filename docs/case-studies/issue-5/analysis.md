@@ -1,79 +1,142 @@
-# Analysis — Player Model for One-try (UE 5.3, blueprint-only)
+# Analysis — Player Model for One-try (Unity 6.3 LTS)
 
 ## 1. Project context
 
-The repository is currently a **blank, blueprint-only Unreal Engine 5.3 project** (`OneTry.uproject`, no `Source/` module). Previous PRs only added:
+The repository is a **Unity 6.3 LTS** project (`ProjectSettings/ProjectVersion.txt:
+m_EditorVersion: 6000.3.5f1`). Per `GAME_DESIGN.md`: "**Движок: Unity**".
 
-- the `.uproject` descriptor with the `ModelingToolsEditorMode` plugin enabled,
-- empty `Config/Default*.ini` files pointing at the engine template map `/Engine/Maps/Templates/Template_Default`,
-- a CI workflow that packages a Win64 Shipping build inside Epic's official `ghcr.io/epicgames/unreal-engine:dev-slim-5.3` Docker image.
+An earlier draft of this PR (before the owner's feedback) implemented the mannequin
+in Unreal Engine 5, which was wrong. This analysis reflects the corrected Unity
+implementation.
 
-No `Content/` assets exist yet, no `GameMode`, no `Character`. The existing `DefaultInput.ini` already declares axis mappings (`MoveForward`, `MoveRight`, `Turn`, `LookUp`) and a `Jump` action that match a third-person character contract — these will be the input handles for the new pawn.
+Previous PRs established:
 
-## 2. Why we should reuse Epic's mannequin
+- A clean Unity project skeleton: `Assets/Scenes/SampleScene.unity`, `Packages/manifest.json`,
+  `ProjectSettings/ProjectVersion.txt`.
+- A working CI workflow (`build.yml`) using GameCI `unity-builder@v4` to cross-compile
+  to `StandaloneWindows64`.
 
-The issue explicitly authorises the use of presets ("используй пресеты если необходимо"). Three independent reasons to use **SKM_Quinn** (or its simplified variant **SKM_Quinn_Simple**) shipped with the UE5 *Third Person* template:
+No gameplay assets existed yet — no player character, no movement, no animation.
 
-1. **Multi-part skeleton out of the box.** UE5's mannequin skeleton has 89 bones following the standard humanoid hierarchy `Root → Pelvis → Spine_01..03 → Clavicle_L/R → UpperArm_L/R → LowerArm_L/R → Hand_L/R → fingers` and `Pelvis → Thigh_L/R → Calf_L/R → Foot_L/R → Ball_L/R`. This satisfies R3 (separate shoulders, forearms, hands; the same detail on the legs).
-2. **Stock idle animations are bundled.** `MM_Idle` (Manny) and `MF_Idle` (Quinn) ship with the same template and play directly on the same skeleton — satisfies R5 with no asset authoring.
-3. **First-class retargeting.** The Manny/Quinn skeleton is the de-facto target for the IK Retargeter, Control Rig, Lyra, and the entire Marketplace/Fab animation ecosystem. Future SIGNALIS-styled meshes (low-poly, PSX-era) can be re-skinned to the same skeleton without throwing away any animation work — satisfies R4.
+## 2. Why a primitive-capsule mannequin (no external asset import)
 
-The "Simple" variant (`SKM_Quinn_Simple`) is a lower-poly, no-fingers mesh that still uses the full mannequin skeleton — visually closer to the SIGNALIS aesthetic (low-poly humanoid with chunky limbs, no high-detail fingers) and a cleaner starting point for a survival-horror retexture.
+The issue authorises using presets ("используй пресеты если необходимо"), but Unity
+has no built-in "Third Person Character" template that ships with a standalone humanoid
+mannequin the way UE5 does.
 
-## 3. SIGNALIS aesthetic — what we are aiming at
+Options considered:
+
+| Approach | Pros | Cons |
+|---|---|---|
+| Unity Humanoid default avatar (Cinemachine + Mixamo FBX) | Industry standard, retarget-ready | Requires binary FBX assets (~MB), licence questions, no playable baseline without the editor |
+| Primitive capsule hierarchy | Zero deps, fully text-diffable YAML, no editor needed | Not a skinned mesh; cosmetically coarser |
+| URP starter assets (Unity Technologies) | Polished, includes animations | Large dependency, changes manifest |
+| ProBuilder proto mesh | Precise geometry | Adds ProBuilder package, still binary after first bake |
+| Runtime-generated procedural mesh | 100% code | Complex, hard to animate |
+
+**Selected:** primitive-capsule hierarchy. Reasons:
+
+1. **Text-only diff** — the prefab YAML is 100% reviewable; no opaque binary blobs.
+2. **Zero extra dependencies** — uses Unity built-in `Capsule` mesh (`fileID: 10208`,
+   `guid: 0000000000000000e000000000000000`), available in every Unity project.
+3. **Correct multi-part hierarchy** — the 13-segment tree satisfies R3 exactly
+   (clavicles, upper arms, forearms, hands; thighs, calves, feet).
+4. **SIGNALIS-ready** — low-poly primitive silhouette resembles the PS1-era aesthetic
+   of Signalis; future swap is just replacing the mesh per segment or switching to a
+   full skinned mesh on the same bone tree.
+5. **CI-compatible** — GameCI headless build can package this prefab immediately.
+
+## 3. Body hierarchy
+
+The `PlayerMannequin.prefab` hierarchy, reflecting a standard humanoid joint chain:
+
+```
+PlayerMannequin (root)          ← PlayerCharacter.cs + Animator
+└── Body
+    ├── Head
+    ├── Neck
+    ├── Chest
+    │   ├── Spine              (connector between hips and chest)
+    │   ├── Clavicle_L
+    │   │   └── UpperArm_L
+    │   │       └── Forearm_L
+    │   │           └── Hand_L
+    │   └── Clavicle_R
+    │       └── UpperArm_R
+    │           └── Forearm_R
+    │               └── Hand_R
+    └── Hips
+        ├── Thigh_L
+        │   └── Calf_L
+        │       └── Foot_L
+        └── Thigh_R
+            └── Calf_R
+                └── Foot_R
+```
+
+All segments use Unity's built-in Capsule primitive with `MeshFilter` + `MeshRenderer`
+(default material). The parent–child transform hierarchy encodes the joint positions
+and segment sizes: `localPosition` places the segment pivot at the joint; `localScale`
+sets the capsule radius/length to match human proportions at 1.75 m standing height.
+
+## 4. Animation
+
+A `PlayerAnimatorController.controller` contains a single Idle state wired to
+`PlayerIdleClip.anim`, which animates a gentle breathing oscillation (±3 cm on the
+Chest's Y position over a 2-second loop). The Animator is attached to the prefab root.
+
+`PlayerCharacter.cs` calls `animator.SetTrigger("Idle")` on `Start()` so the idle
+loop begins immediately when the scene loads.
+
+## 5. SIGNALIS aesthetic — what we're aiming at
 
 From the rose-engine press kit and reviews:
 
-- SIGNALIS deliberately replicates **fifth-generation (PS1-era) survival horror** rendering — low-poly 3D characters with limited texture resolution, blended with 2D sprites and dithered post-processing.
-- Visual references: **Silent Hill 1–3, Resident Evil 1–3**, East-German 1980s industrial design, analog CRT artefacts.
-- Character silhouette: humanoid Replika (worker-android) — slim, uniformed, **clearly readable silhouette at low resolution**.
+- SIGNALIS deliberately replicates **fifth-generation (PS1-era) survival horror**
+  rendering — low-poly 3D characters, limited texture resolution, 2D sprites and
+  dithered post-processing.
+- Character silhouette: humanoid Replika (worker-android) — slim, uniformed, clearly
+  readable at low resolution.
 - Lighting: low-key, high-contrast, monochrome accents over muted reds/teals.
 
-**Implication for the player model:** the choice of `SKM_Quinn_Simple` (low-poly, clean silhouette, no fingers) is the closest stock starting point. The eventual SIGNALIS pass will be:
+**Implication:** the capsule-based mannequin is a good stand-in; it has the chunky
+PSX-era proportions. The future SIGNALIS pass:
 
-1. Replace material with a flat / cel-shaded master material + 256² diffuse.
-2. Optionally swap mesh for a re-skinned low-poly Replika using the same mannequin skeleton.
-3. Add a post-process volume with dithering and chromatic aberration (out of scope for this issue).
+1. Replace each capsule's material with a flat/cel-shaded master material.
+2. Or replace the entire prefab hierarchy with a skinned mesh (FBX + Humanoid rig)
+   using the same Animator Controller — `PlayerCharacter.cs` and the CI workflow are
+   untouched.
 
-## 4. Constraints imposed by the build environment
+## 6. Constraints imposed by the build environment
 
-- **No UE Editor in CI / dev shell.** The repository's CI runs in Epic's Linux Docker image and packages via `BuildCookRun` — there is no interactive editor. The agent that authored this PR also cannot launch the editor to drag-and-drop assets.
-- **Binary `.uasset` files cannot be hand-authored.** Skeletal meshes, animations and Blueprints are serialized binary blobs. We cannot generate them from a text-only environment without running the editor.
-- **The Docker image already ships the Third Person template.** Epic's `ghcr.io/epicgames/unreal-engine:dev-slim-5.3` image contains the engine at `/home/ue4/UnrealEngine`, which includes `Engine/Content/...` and `Templates/TP_ThirdPersonBP/Content/Characters/Mannequins/...`. We can therefore migrate the mannequin assets headlessly via a Python commandlet at build time.
+- **No Unity Editor in CI.** GameCI's `unity-builder@v4` runs headless; it can import
+  and build Unity YAML assets (prefabs, scenes, animators) without interactive input.
+- **Binary assets cannot be hand-authored.** FBX, PNG, and AudioClip files require the
+  editor to import. The capsule primitive bypasses this completely.
+- **Unity YAML is plain text.** Prefabs and AnimationClips are YAML-serialized when the
+  project uses text-mode serialization (`ProjectSettings/EditorSettings.asset` default).
 
-## 5. Solution approach
-
-The implementation is split into three text-only artefacts that, together, cause the mannequin and idle animation to materialise inside `Content/` the first time the project is opened in the editor (or built in CI):
-
-1. **`Tools/Setup_PlayerMannequin.py`** — an Unreal Editor Python script that:
-   - Locates the engine-bundled Third Person template content.
-   - Migrates `SKM_Quinn_Simple`, `SK_Mannequin`, `MM_Idle`, `MF_Idle` and the physics asset into `/Game/Characters/Mannequin/`.
-   - Creates `/Game/Player/ABP_PlayerCharacter` (an Animation Blueprint that plays `MF_Idle` on loop).
-   - Creates `/Game/Player/BP_PlayerCharacter` (a `Character` Blueprint with the skeletal mesh and ABP wired up, capsule sized to the mannequin, mesh rotated -90° on yaw and offset -90 cm on Z to match Epic's convention).
-   - Creates `/Game/Player/BP_PlayerGameMode` with `BP_PlayerCharacter` as the default pawn.
-2. **`Config/DefaultEngine.ini`** — set `GameMode=/Game/Player/BP_PlayerGameMode.BP_PlayerGameMode_C` so PIE uses the new pawn.
-3. **`docs/PlayerModel.md`** — a one-page runbook that explains the two ways to materialise the assets (Tools menu in the editor, or `-run=PythonScript` from the command line / CI).
-
-This keeps the repository **fully text-based and diff-reviewable** — no binary `.uasset` blobs are committed — while making the player model reproducible on any machine that has UE 5.3 installed.
-
-## 6. Validation plan
+## 7. Validation plan
 
 Manual (in editor):
 
-1. Open `OneTry.uproject` in UE 5.3.
-2. Run **Tools → Execute Python Script…** → pick `Tools/Setup_PlayerMannequin.py`.
-3. Open the default map, press **Play**. Expect: a multi-part mannequin spawns at PlayerStart, plays `MF_Idle` on loop, WASD moves it, mouse turns it, Space jumps.
+1. Open the project in Unity 6.3 LTS via Unity Hub.
+2. Open `Assets/Scenes/SampleScene.unity`.
+3. Via **GameObject → One-try → Add Player Mannequin** (or drag the prefab from
+   `Assets/Characters/Player/PlayerMannequin.prefab`).
+4. Press **Play**. Expect: multi-part mannequin visible; chest gently bobs; Animator
+   shows "Idle" state active.
 
-Automated (CI, future PR — not required by this issue):
+Automated (CI):
 
-- Add a CI step that runs the script headlessly:
-  `UnrealEditor-Cmd OneTry.uproject -run=PythonScript -script="Tools/Setup_PlayerMannequin.py"` before `BuildCookRun`.
-- Verify the `BP_PlayerCharacter`, `ABP_PlayerCharacter` and `BP_PlayerGameMode` assets are present in the staged build.
+- GameCI `unity-builder@v4` packages the scene including the prefab. The build
+  succeeds as long as `UNITY_LICENSE`, `UNITY_EMAIL`, `UNITY_PASSWORD` secrets are
+  set in the repository (see README).
 
-## 7. Risks & mitigations
+## 8. Risks & mitigations
 
 | Risk | Mitigation |
 |---|---|
-| User opens the project without running the setup script → no pawn spawns. | `docs/PlayerModel.md` and `README.md` mention the one-click setup. The `DefaultEngine.ini` change is benign if the asset is missing (UE falls back to `DefaultPawn`). |
-| UE updates change template asset paths. | Script discovers the template root dynamically via `unreal.Paths.engine_dir()` and tries multiple known sub-paths. |
-| Future SIGNALIS retexture needs a different mesh. | Skeleton is preserved; only the `SkeletalMesh` and `Materials` slots need swapping. ABP is mesh-agnostic. |
+| `PlayerMannequin.prefab` opens in wrong Unity version and capsule fileIDs differ | Built-in primitive GUIDs (`0000000000000000e000000000000000`) are stable across all Unity versions. |
+| Future SIGNALIS mesh swap needs a different hierarchy | `PlayerCharacter.cs` only requires an `Animator` on root; hierarchy under `Body` can be completely replaced. |
+| Idle animation only animates Chest, other segments static | Sufficient for mannequin verification; future PRs extend the AnimatorController. |
