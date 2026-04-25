@@ -10,6 +10,9 @@ Empty 3D scene project built with Unreal Engine 5.
 
 1. Install Unreal Engine 5.3 via Epic Games Launcher.
 2. Double-click `OneTry.uproject` to open in the editor.
+3. Run **Tools → Execute Python Script…** → pick `Tools/Setup_PlayerMannequin.py`
+   to materialise the player mannequin and idle animation. See
+   [`docs/PlayerModel.md`](docs/PlayerModel.md) for details.
 
 ## GitHub Actions — Portable Windows EXE
 
