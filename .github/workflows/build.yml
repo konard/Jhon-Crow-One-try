@@ -12,9 +12,9 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------
-  # checklicense: skips the build cleanly when no Unity license is set,
-  # so first-time contributors and forks see a clear "configure secrets"
-  # signal instead of a red CI.
+  # checklicense: validates that packaging can actually run. Push/PR builds
+  # fail when UNITY_LICENSE is missing because otherwise GitHub would show a
+  # green workflow with no downloadable EXE artifact.
   # ---------------------------------------------------------------------
   checklicense:
     name: Check for UNITY_LICENSE in GitHub Secrets
@@ -35,6 +35,13 @@ jobs:
             echo "See README.md → 'GitHub Actions — Portable Windows EXE → Setup'."
             echo "is_unity_license_set=false" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Fail when push/PR cannot produce portable EXE
+        if: steps.checklicense_job.outputs.is_unity_license_set == 'false' && github.event_name != 'workflow_dispatch'
+        run: |
+          echo "::error title=Portable EXE artifact is not available::UNITY_LICENSE is missing, so the Windows packaging job cannot run and no OneTry-Win64 ZIP artifact can be uploaded."
+          echo "Add UNITY_LICENSE, UNITY_EMAIL, and UNITY_PASSWORD repository secrets, then re-run this workflow."
+          exit 1
 
   # ---------------------------------------------------------------------
   # activation: runs on demand (manual workflow_dispatch) when there is

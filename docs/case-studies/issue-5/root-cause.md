@@ -4,6 +4,7 @@ Two problems were flagged by the owner on PR #6:
 
 1. **The project is on Unreal Engine, but it should be on Unity.**
 2. **There is no portable EXE artifact coming out of GitHub Actions.**
+3. **After switching to Unity, the workflow still reported success while the packaging job was skipped, so there was still no artifact to download.**
 
 Both have the same upstream cause; the EXE failure is a symptom of the engine-choice failure.
 
@@ -55,6 +56,21 @@ Both have the same upstream cause; the EXE failure is a symptom of the engine-ch
   - pairs naturally with `actions/upload-artifact@v4` to publish a portable ZIP.
 - Adds a `checklicense` job that **skips the build cleanly** when `UNITY_LICENSE` is not set, so first-time forks see a green-with-a-message workflow instead of a red one. The on-demand `activation` job produces the manual-activation file the owner needs upload-once.
 - Documents the secret setup in both `README.md` and the workflow file's leading comments. Caches `Library/` so subsequent runs are fast.
+
+### Follow-up after owner feedback
+
+The first Unity workflow draft made `checklicense` pass and skipped the real
+`build` job when `UNITY_LICENSE` was missing. That was still wrong for this
+issue because GitHub displayed a successful workflow run with **zero
+artifacts**. The corrected workflow now:
+
+- fails push and pull-request runs when Unity secrets are missing, because
+  those runs cannot satisfy the "portable EXE artifact" requirement;
+- keeps manual `workflow_dispatch` activation available without failing, so
+  the owner can download the `.alf` activation request artifact;
+- uploads the final EXE as artifact `OneTry-Win64-<run-number>` after secrets
+  are configured. Inside it, `OneTry-Win64.zip` contains
+  `StandaloneWindows64/OneTry.exe`.
 
 ### Preventing recurrence
 

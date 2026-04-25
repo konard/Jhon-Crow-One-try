@@ -65,13 +65,18 @@ The build needs a Unity license. Personal licenses are free.
    - `UNITY_EMAIL` — your Unity account email.
    - `UNITY_PASSWORD` — your Unity account password.
 
-Until those secrets are set, the build job is skipped with a clear
-message instead of failing red.
+Until those secrets are set, push and pull-request runs fail at
+`Check for UNITY_LICENSE in GitHub Secrets` because they cannot produce
+the required portable EXE artifact. Manual `workflow_dispatch` runs are
+allowed to continue to the activation job so the owner can download the
+`.alf` activation-request artifact.
 
 ### Running the build
 
 - Triggers automatically on push to `main` / `issue-*` branches and on
   PRs targeting `main`. Can also be run manually via **Actions → Build
   Portable Windows EXE → Run workflow**.
-- Download the ZIP artifact from the workflow run summary. Extract and
-  run `OneTry.exe` — no installation required.
+- After a successful run with Unity secrets configured, open the run
+  summary and download the artifact named `OneTry-Win64-<run-number>`.
+  The artifact contains `OneTry-Win64.zip`; extract it and run
+  `StandaloneWindows64/OneTry.exe` — no installation required.
