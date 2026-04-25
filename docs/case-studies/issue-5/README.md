@@ -5,6 +5,8 @@ This folder collects the research and design rationale behind the player-model i
 | File | Purpose |
 |---|---|
 | [issue.md](./issue.md) | Original issue text (RU + EN translation), explicit requirements table, out-of-scope list. |
+| [timeline.md](./timeline.md) | Reconstructed sequence of events from `git log` + GitHub comments, including the engine drift and the moment it was caught. |
+| [root-cause.md](./root-cause.md) | Five-whys analysis for the wrong engine and the broken EXE pipeline, with the fixes and recurrence-prevention measures. |
 | [analysis.md](./analysis.md) | Project context, Unity engine choice, multi-part primitive mannequin rationale, SIGNALIS aesthetic notes, build-environment constraints, validation plan, risks. |
 | [proposed-solutions.md](./proposed-solutions.md) | Comparison of approaches and the selected solution (Unity primitive-based mannequin prefab). |
 | [references.md](./references.md) | All consulted sources (SIGNALIS press kit, Unity docs, animation/humanoid references, GameCI). |
