@@ -1,78 +1,52 @@
 # One-try
 
-3D action / roguelite game project built with **Unity 6.3 LTS** (`6000.3.x`).
+3D action / roguelite game project built with **Unreal Engine 5.3** (blueprint-only).
 
 See [`GAME_DESIGN.md`](./GAME_DESIGN.md) for the design document and
-[`docs/case-studies/issue-8/`](./docs/case-studies/issue-8/) for the
-case study explaining the engine choice and migration from the initial
-Unreal Engine prototype.
+[`docs/case-studies/issue-19/`](./docs/case-studies/issue-19/) for the
+case study explaining the migration back to Unreal Engine.
 
 ## Requirements
 
-- [Unity Hub](https://unity.com/download)
-- Unity Editor **6.3 LTS** (any 6000.3.x revision). The pinned revision
-  is in `ProjectSettings/ProjectVersion.txt`; Unity Hub will offer to
-  install the matching version when you first open the project.
+- [Epic Games Launcher](https://www.unrealengine.com/en-US/download)
+- Unreal Engine **5.3** installed via the Epic Games Launcher
 
 ## Opening the project
 
-1. Install Unity Hub.
-2. Install Unity Editor 6.3 LTS via Unity Hub.
-3. In Unity Hub, click **Add → Add project from disk** and select this
-   folder.
-4. Open the project. The first open takes a few minutes while Unity
-   imports packages and generates the local `Library/` cache.
-5. Open `Assets/Scenes/SampleScene.unity`.
-
-## Player Mannequin
-
-A multi-part humanoid mannequin prefab lives at
-`Assets/Characters/Player/PlayerMannequin.prefab`. To test it:
-
-1. In an open scene, use the menu **GameObject → One-try → Add Player Mannequin**,
-   or drag the prefab from the Project window.
-2. Press **Play**. The mannequin plays a looping idle animation (gentle chest
-   breathing).
-
-The mannequin is built from Unity primitive Capsules arranged in a humanoid
-hierarchy (clavicles, upper arms, forearms, hands; thighs, calves, feet).
-No external assets required — everything is in the repo as readable YAML.
-Segment meshes and materials can be swapped independently for future
-SIGNALIS-style visuals.
+1. Install the Epic Games Launcher and sign in.
+2. In the **Library** tab, install Unreal Engine **5.3**.
+3. Double-click `OneTry.uproject` — the Launcher will open it in UE5.3.
+4. The first open takes a few minutes while shaders compile.
 
 ## GitHub Actions — Portable Windows EXE
 
 The workflow [`.github/workflows/build.yml`](./.github/workflows/build.yml)
-packages a portable Windows EXE on every push. It uses the
-[GameCI](https://game.ci) `unity-builder` action, runs on a free
-GitHub-hosted Linux runner, cross-compiles to `StandaloneWindows64`, and
-uploads the result as a workflow artifact.
+packages a portable Windows EXE on every push. It uses Epic's official
+`ghcr.io/epicgames/unreal-engine` Docker image, runs on a free GitHub-hosted
+Linux runner, cross-compiles to `Win64` via `BuildCookRun`, and uploads
+the result as a workflow artifact.
 
 ### Setup (required once)
 
-The build needs a Unity account. Personal licenses are free.
+The build pulls Epic's private Docker image, which requires a GitHub account
+linked to your Epic Games account.
 
-1. Create a free Unity account at <https://id.unity.com> if you don't
-   have one.
-2. Add the following secrets in **Settings → Secrets and variables →
-   Actions**:
-   - `UNITY_EMAIL` — your Unity account email address.
-   - `UNITY_PASSWORD` — your Unity account password.
+1. Log in at <https://www.unrealengine.com/en-US/ue-on-github> and link
+   your GitHub account to your Epic Games account (free).
+2. Create a GitHub Personal Access Token (PAT) with `read:packages` scope
+   at <https://github.com/settings/tokens>.
+3. Add the following secret in **Settings → Secrets and variables → Actions**:
+   - `EPIC_GITHUB_TOKEN` — the PAT created in step 2.
 
-That is all. The workflow activates a Personal license automatically
-using [`buildalon/activate-unity-license`](https://github.com/buildalon/activate-unity-license)
-at build time — no `.alf` or `.ulf` file generation or upload is needed.
-
-Until those two secrets are set, push and pull-request runs pass the
-`Check for Unity credentials in GitHub Secrets` preflight but skip the
-Unity packaging job, so no portable EXE artifact is uploaded.
+Until that secret is set, push and pull-request runs pass the
+`Check for Epic Games credentials in GitHub Secrets` preflight but skip the
+packaging job, so no portable EXE artifact is uploaded.
 
 ### Running the build
 
 - Triggers automatically on push to `main` / `issue-*` branches and on
   PRs targeting `main`. Can also be run manually via **Actions → Build
   Portable Windows EXE → Run workflow**.
-- After a successful run with Unity secrets configured, open the run
-  summary and download the artifact named `OneTry-Win64-<run-number>`.
-  The artifact contains `OneTry-Win64.zip`; extract it and run
-  `StandaloneWindows64/OneTry.exe` — no installation required.
+- After a successful run, open the run summary and download the artifact
+  named `OneTry-Win64-<run-number>`. The artifact contains `OneTry-Win64.zip`;
+  extract it and run `WindowsNoEditor/OneTry.exe` — no installation required.

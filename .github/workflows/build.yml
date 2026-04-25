@@ -9,105 +9,96 @@ on:
 
 env:
   PROJECT_NAME: OneTry
+  UE_VERSION: "5.3"
+  UE_IMAGE: "ghcr.io/epicgames/unreal-engine:dev-slim-5.3"
 
 jobs:
-  # ---------------------------------------------------------------------
-  # checklicense: reports whether the build can run based on available
-  # credentials. Push/PR builds stay green without Unity credentials so
-  # repository setup does not block CI; the real build job still runs
-  # only when UNITY_EMAIL and UNITY_PASSWORD are configured.
-  # ---------------------------------------------------------------------
+  # -----------------------------------------------------------------------
+  # checklicense: determines whether the build can run based on available
+  # Epic credentials. Push/PR builds stay green without credentials so
+  # repository setup does not block CI; the actual build job only runs
+  # when EPIC_GITHUB_TOKEN is configured.
+  # -----------------------------------------------------------------------
   checklicense:
-    name: Check for Unity credentials in GitHub Secrets
+    name: Check for Epic Games credentials in GitHub Secrets
     runs-on: ubuntu-latest
     outputs:
-      has_credentials: ${{ steps.checklicense_job.outputs.has_credentials }}
+      has_credentials: ${{ steps.check.outputs.has_credentials }}
     steps:
-      - id: checklicense_job
+      - id: check
         env:
-          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
-          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          EPIC_GITHUB_TOKEN: ${{ secrets.EPIC_GITHUB_TOKEN }}
         run: |
-          if [ -n "$UNITY_EMAIL" ] && [ -n "$UNITY_PASSWORD" ]; then
-            echo "Unity credentials are set; build will run."
+          if [ -n "$EPIC_GITHUB_TOKEN" ]; then
+            echo "Epic credentials are set; build will run."
             echo "has_credentials=true" >> "$GITHUB_OUTPUT"
           else
-            echo "Unity credentials (UNITY_EMAIL and/or UNITY_PASSWORD) are NOT set."
-            echo "Add UNITY_EMAIL and UNITY_PASSWORD repository secrets to enable Windows packaging."
-            echo "See README.md → 'GitHub Actions — Portable Windows EXE → Setup'."
+            echo "EPIC_GITHUB_TOKEN is NOT set."
+            echo "To enable the portable EXE build:"
+            echo "  1. Link your GitHub account to Epic Games at https://www.unrealengine.com/en-US/ue-on-github"
+            echo "  2. Add EPIC_GITHUB_TOKEN repository secret (Settings → Secrets and variables → Actions)"
+            echo "See README.md for full setup instructions."
             echo "has_credentials=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Report portable EXE artifact availability
-        if: steps.checklicense_job.outputs.has_credentials == 'false'
+        if: steps.check.outputs.has_credentials == 'false'
         run: |
-          echo "::warning title=Portable EXE artifact is not available::Unity credentials are missing, so the Windows packaging job is skipped and no OneTry-Win64 ZIP artifact is uploaded for this run."
-          echo "Add UNITY_EMAIL and UNITY_PASSWORD repository secrets, then re-run this workflow to produce the portable EXE artifact."
+          echo "::warning title=Portable EXE artifact is not available::EPIC_GITHUB_TOKEN is missing, so the Windows packaging job is skipped and no OneTry-Win64 ZIP artifact is uploaded for this run."
+          echo "Add EPIC_GITHUB_TOKEN as a repository secret to produce the portable EXE artifact."
 
-  # ---------------------------------------------------------------------
-  # build: cross-compiles the Unity project to StandaloneWindows64 from
-  # a Linux runner via GameCI's Docker images. Activates a Personal Unity
-  # license via buildalon/activate-unity-license (credential-based,
-  # no .alf/.ulf exchange needed). Library/ is cached per platform for
-  # fast subsequent builds.
-  # ---------------------------------------------------------------------
+  # -----------------------------------------------------------------------
+  # build: packages the UE5 project to a Windows Shipping EXE using
+  # UnrealAutomationTool (BuildCookRun) inside Epic's official Docker
+  # image. Runs on a Linux runner (cross-compiles to Win64).
+  # -----------------------------------------------------------------------
   build:
     needs: checklicense
     if: needs.checklicense.outputs.has_credentials == 'true'
-    name: Package Windows Shipping Build (StandaloneWindows64)
+    name: Package Windows Shipping Build (Win64)
     runs-on: ubuntu-latest
+    container:
+      image: ${{ env.UE_IMAGE }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.EPIC_GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
           lfs: true
 
-      - name: Cache Library
-        uses: actions/cache@v4
-        with:
-          path: Library
-          key: Library-StandaloneWindows64-${{ hashFiles('Packages/manifest.json', 'ProjectSettings/ProjectVersion.txt') }}
-          restore-keys: |
-            Library-StandaloneWindows64-
-            Library-
-
-      - name: Activate Unity license
-        uses: buildalon/activate-unity-license@v1
-        with:
-          license: 'Personal'
-          username: ${{ secrets.UNITY_EMAIL }}
-          password: ${{ secrets.UNITY_PASSWORD }}
-
-      - name: Build Unity project
-        uses: game-ci/unity-builder@v4
-        env:
-          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
-          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
-          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-        with:
-          targetPlatform: StandaloneWindows64
-          buildName: ${{ env.PROJECT_NAME }}
-
-      - name: Return Unity license
-        if: always()
-        uses: buildalon/activate-unity-license@v1
-        with:
-          return-license: true
+      - name: Package Win64 Shipping EXE
+        run: |
+          /home/ue4/UnrealEngine/Engine/Build/BatchFiles/RunUAT.sh BuildCookRun \
+            -project="$GITHUB_WORKSPACE/${{ env.PROJECT_NAME }}.uproject" \
+            -noP4 \
+            -platform=Win64 \
+            -clientconfig=Shipping \
+            -cook \
+            -allmaps \
+            -build \
+            -stage \
+            -pak \
+            -archive \
+            -archivedirectory="$GITHUB_WORKSPACE/ArchivedBuilds" \
+            -prereqs \
+            -nodebuginfo
 
       - name: List packaged output
         if: always()
         run: |
-          echo "Contents of build/:"
-          find build -maxdepth 4 -type f | head -100 || echo "build/ not found"
+          echo "Contents of ArchivedBuilds/:"
+          find ArchivedBuilds -maxdepth 4 -type f | head -100 || echo "ArchivedBuilds/ not found"
 
       - name: Create portable ZIP archive
-        if: success()
         run: |
-          cd build
-          zip -r "../${{ env.PROJECT_NAME }}-Win64.zip" StandaloneWindows64/ \
-            -x "*.pdb" "*.debug"
+          cd ArchivedBuilds
+          zip -r "../${{ env.PROJECT_NAME }}-Win64.zip" WindowsNoEditor/ \
+            -x "*.pdb" "*.debug" "Manifest_*" || \
+          zip -r "../${{ env.PROJECT_NAME }}-Win64.zip" . \
+            -x "*.pdb" "*.debug" "Manifest_*"
 
       - name: Upload portable EXE artifact
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.PROJECT_NAME }}-Win64-${{ github.run_number }}
